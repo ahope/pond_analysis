@@ -1,0 +1,160 @@
+---
+title: "Quick Analysis"
+author: "ahs"
+date: "November 29, 2015"
+output: pdf_document
+---
+
+This is a quick little analysis I did for some data that I collected as part 
+of my final dissertation project. I had about 20 people use a food diary on their 
+cell phones for 3 weeks. The code was instrumented with analytics codes to make it 
+easy (well, possible!) to analyze usage of the food diary over time. 
+
+```{r, echo = FALSE, warning = FALSE}
+
+data_file = '~/Documents/data/POND_actionlogs/PondActionLog.csv'
+
+action_map_file =  '~/Documents/data/POND_actionlogs/PondActionIdMapping.csv'
+
+histo_colors = c('darkorange1', 
+                 'darkorchid', 
+                 'deepskyblue1', 
+                 'gold1', 
+                 'deeppink1', 
+                 'yellowgreen', 
+                 'cadetblue', 
+                 'maroon1', 
+                 'navy', 
+                 'tan4', 
+                 'black')
+
+
+  library(gdata)
+  library(ggplot2)
+  library(plyr)
+  library(dplyr)
+  library(class)
+  library(gmodels)
+
+
+action_log <- read.csv(data_file)
+head(action_log)
+
+actionId_map <- read.csv(action_map_file)
+
+nrow(action_log)
+action_log <- action_log[action_log$pptId != '',]
+action_log$when <- strptime(action_log$timestamp, format='%m/%d/%y %H:%M')
+action_log$when.l <- as.integer(as.POSIXct(action_log$when))
+
+## Fine for a moment, but should really be shifted by time of day when the study started
+action_log$studyDay <- floor(action_log$mins / 1440)
+
+action_log <- merge(action_log, actionId_map, by = 'actionId', all.x = TRUE )
+action_log <- unique(action_log) ## It looks like there are 3-4 copies of each log in the data set. 
+
+# actionId == 14 => start of study
+
+table(action_log$typeId)
+
+p1001 <- action_log[action_log$pptId == 'p1001', ]
+p1001$when <- strptime(p1001$timestamp, format='%m/%d/%y %H:%M')
+p1001$when.l <- as.integer(as.POSIXct(p1001$when))
+p1001.start <- p1001[p1001$actionId == 14, ]
+
+```
+
+My first plot is all the data, with each action type represented in each facet panel. 
+This first one is just the action for a single participant on a single day, so a 
+point represents that the given participant had a given action on that day of the study. 
+
+
+```{r, echo=FALSE, fig.height = 8}
+
+minToDayLabels <- lapply(seq(0, 42373, by = 60 * 24), 
+                         FUN = function(x)(return(sprintf('Day %d', x/1440))))
+
+
+ggplot(data = unique(action_log), aes(x = studyDay, y = pptId, 
+                                      fill = actionName, 
+                                      color = actionName)) + 
+  scale_color_manual( values = histo_colors) +
+  scale_x_continuous(breaks = seq(0, 29), 
+                     labels= minToDayLabels) +
+  #geom_jitter(binwidth = 60 ) + 
+    geom_vline(xintercept = 0) + 
+  geom_vline(xintercept =  7) + 
+  geom_vline(xintercept =  14) + 
+  geom_vline(xintercept =  21) + 
+  theme(axis.text.x = element_text(angle=90, vjust = 1, hjust = 1), 
+        axis.text.y = element_blank()) +
+  geom_point() + 
+  facet_grid(actionName ~ .) + 
+  ggtitle('All Ppts, All Actions')
+
+
+```
+
+A few initial observations: 
+
+* Only a couple of participants changed any daily goals (purple dots), and that was only in 
+  the first few days of the study. 
+* More people actually looked at the goals (black dots), and that was throughout the study. 
+* A few people edited records throughout the study, but not many. 
+
+There are three things we want to look at: 
+
+* Actions related to using the food database. 
+* Actions related to using the +1 buttons. 
+* How often the app was started over the course of the study. 
+
+# App Starts throughout the study
+
+One behavior we wanted to see from our participants was a good pattern of 
+starting the app-- multiple times per day, hopefully a consistent pattern. 
+Here, I've plotted the number of app starts per day. The black horizontal line 
+indicates three app starts per day. 
+
+```{r, echo = FALSE, warning = FALSE, fig.height = 12}
+
+starts.only <- action_log[action_log$actionId == 0,
+                           c('pptId', 'studyDay', 'actionId')]
+num.starts.per.day <- ddply(starts.only, 
+                           c('pptId', 'studyDay'), count)
+
+num.starts.per.day.plot <- 
+  ggplot(data = num.starts.per.day, aes(x = studyDay, y = n, 
+                                      colour = pptId)) + 
+  #scale_color_brewer(type = 'qual', palette = 'Set1') +
+  scale_x_continuous(breaks = seq(-1, 29, by = 1), 
+                     labels= c('Day -1', minToDayLabels)) +
+  theme_light() +
+  geom_vline(xintercept = 0) + 
+  geom_vline(xintercept =  7) + 
+  geom_vline(xintercept = 14) + 
+  geom_vline(xintercept = 21) + 
+  geom_hline(yintercept = 3) + 
+  theme(axis.text.x = element_text(angle=90, vjust = 1, hjust = 1)) +
+  geom_line(size = 1) + 
+  facet_grid(pptId ~ .) + 
+  ggtitle('Number of times app was started each day')
+
+print(num.starts.per.day.plot)
+
+```
+
+
+* to do: table of number of app starts per day. Mean number of starts per day for each ppt. 
+* For each ppt: 
+    * Number of days with more than one start
+    * Number of days with 0 starts 
+    * Number of days with 3 or more starts
+    
+# Question to investigate: 
+
+In the preliminary analysis, I saw different users use different strategies for 
+entering given food items. It would be interesting to see if there is a correlation 
+between what people do in the lab and what they do in the field. 
+
+
+
